@@ -408,9 +408,12 @@
     document.getElementById('success-wallet-display').textContent =
       `→ ${data.wallet.slice(0, 8)}...${data.wallet.slice(-6)}`;
 
-    if (data.txHashes?.confirm) {
-      document.getElementById('btn-view-tx').href =
-        `https://explorer.cronos.org/testnet/tx/${data.txHashes.confirm}`;
+    const txUrl = data.explorerUrl ||
+      (data.txHashes?.confirm
+        ? `https://explorer.cronos.org/testnet/tx/${data.txHashes.confirm}`
+        : null);
+    if (txUrl) {
+      document.getElementById('btn-view-tx').href = txUrl;
     }
 
     document.getElementById('cooldown-notice').textContent =
