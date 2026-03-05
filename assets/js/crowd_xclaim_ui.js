@@ -1,12 +1,22 @@
 /**
  * crowd-xclaim-ui.js
  * ============================================================
+ * Drop-in module untuk CROWD Protocol website yang sudah ada.
+ * Tambahkan ke index.html, inject section Claim ke Home page.
+ *
+ * Cara pakai:
+ *   1. Taruh file ini di assets/js/
+ *   2. Tambahkan <script src="assets/js/crowd-xclaim-ui.js"></script>
+ *      sebelum </body> di index.html
+ *   3. Tambahkan <div id="xclaim-section"></div> di HTML
+ *      (atau biarkan script yang inject otomatis setelah leaderboard)
+ * ============================================================
  */
 
 (function () {
   'use strict';
 
-  const API_BASE = window.XCLAIM_API_BASE || 'http://localhost:3001';
+  const API_BASE = 'http://localhost:3001';
   const POLL_INTERVAL_MS = 5000;
 
   // ── STATE ─────────────────────────────────────────────────
@@ -18,7 +28,8 @@
     step:        'idle', // idle | generating | pending | posted | completed | expired
   };
 
-  // ── HTML ─────────────────────────────────────────
+  // ── HTML TEMPLATE ─────────────────────────────────────────
+  // Disimpan sebagai variabel agar bisa dipanggil dari tryInject()
   var _xclaimHtml = `
       <section id="xclaim-section" class="xclaim-section">
         <div class="section-header">
@@ -139,16 +150,11 @@
       </section>
   `;
 
-  // injectSection
+  // injectSection dipanggil hanya untuk kompatibilitas — logic ada di tryInject()
   function injectSection() {
     tryInject();
   }
 
-
-  // ── HELPERS ───────────────────────────────────────────────
-  function buildWebIntentUrl(tweetText) {
-    return `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
-  }
 
   // ── API CALLS ─────────────────────────────────────────────
   async function apiFetch(path, options = {}) {
@@ -177,66 +183,68 @@
     } catch {}
   }
 
-      async function connectWallet() {
-      // Tunggu wallet extension inject ke window (max 3 detik)
-      const provider = await detectProvider();
-
-      if (!provider) {
-        showError('NO_WALLET', 'OKX Wallet detected but not ready. Try to refresh page.');
-        return;
+  // Detect wallet provider — support OKX, MetaMask, dll
+  function detectProvider(maxWait) {
+    maxWait = maxWait || 3000;
+    return new Promise(function(resolve) {
+      function getProvider() {
+        if (window.okxwallet && typeof window.okxwallet.request === 'function') return window.okxwallet;
+        if (window.ethereum  && typeof window.ethereum.request  === 'function') return window.ethereum;
+        return null;
       }
+      var p = getProvider();
+      if (p) return resolve(p);
+      var elapsed = 0;
+      var t = setInterval(function() {
+        elapsed += 100;
+        var pp = getProvider();
+        if (pp)              { clearInterval(t); return resolve(pp); }
+        if (elapsed >= maxWait) { clearInterval(t); return resolve(null); }
+      }, 100);
+    });
+  }
 
-      try {
-        const accounts = await provider.request({ method: 'eth_requestAccounts' });
-        state.wallet = accounts[0];
+  async function connectWallet() {
+    const provider = await detectProvider(3000);
 
-        try {
-          await provider.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x152' }],
-          });
-        } catch (switchErr) {
-          if (switchErr.code === 4902) {
-            await provider.request({
-              method: 'wallet_addEthereumChain',
-              params: [{
-                chainId:           '0x152',
-                chainName:         'Cronos Testnet',
-                nativeCurrency:    { name: 'CRO', symbol: 'CRO', decimals: 18 },
-                rpcUrls:           ['https://evm-t3.cronos.org'],
-                blockExplorerUrls: ['https://explorer.cronos.org/testnet'],
-              }],
-            });
-          }
-        }
-
-        document.getElementById('display-wallet').textContent =
-          state.wallet.slice(0, 6) + '...' + state.wallet.slice(-4);
-
-        showStep('step-eligible');
-        await checkEligibility();
-      } catch (err) {
-        showError('WALLET_ERROR', err.message);
-      }
+    if (!provider) {
+      showError('NO_WALLET', 'Wallet tidak terdeteksi. Pastikan OKX Wallet atau MetaMask terpasang lalu refresh halaman.');
+      return;
     }
 
-    // Helper: detect provider dengan retry
-      function detectProvider(maxWait = 3000) {
-        return new Promise((resolve) => {
-          // Cek langsung tanpa delay
-          if (window.okxwallet?.request) return resolve(window.okxwallet);
-          if (window.ethereum?.request)  return resolve(window.ethereum);
+    try {
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
+      state.wallet = accounts[0];
 
-          // OKX kadang butuh waktu inject — polling 100ms
-          let elapsed = 0;
-          const timer = setInterval(() => {
-            elapsed += 100;
-            if (window.okxwallet?.request) { clearInterval(timer); return resolve(window.okxwallet); }
-            if (window.ethereum?.request)  { clearInterval(timer); return resolve(window.ethereum); }
-            if (elapsed >= maxWait)        { clearInterval(timer); return resolve(null); }
-          }, 100);
+      try {
+        await provider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x152' }],
         });
+      } catch (switchErr) {
+        if (switchErr.code === 4902) {
+          await provider.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId:           '0x152',
+              chainName:         'Cronos Testnet',
+              nativeCurrency:    { name: 'CRO', symbol: 'CRO', decimals: 18 },
+              rpcUrls:           ['https://evm-t3.cronos.org'],
+              blockExplorerUrls: ['https://explorer.cronos.org/testnet'],
+            }],
+          });
+        }
       }
+
+      document.getElementById('display-wallet').textContent =
+        state.wallet.slice(0, 6) + '...' + state.wallet.slice(-4);
+
+      showStep('step-eligible');
+      await checkEligibility();
+    } catch (err) {
+      showError('WALLET_ERROR', err.message);
+    }
+  }
 
   async function checkEligibility() {
     try {
@@ -251,26 +259,11 @@
       }
 
       if (data.activeClaim) {
-        // Normalisasi: pastikan claimId tersedia dalam dua format
-        const activeClaim = {
-          ...data.activeClaim,
-          claim_id: data.activeClaim.claim_id || data.activeClaim.claimId,
-          claimId:  data.activeClaim.claim_id || data.activeClaim.claimId,
-        };
-
-        state.claimId = activeClaim.claim_id;
-        console.log('[xclaim] Resuming claimId:', state.claimId); // debug
-
-        if (!state.claimId) {
-          // claimId tetap undefined — clear active claim, mulai fresh
-          el.innerHTML = `<div class="elig-ok">✓ Eligible! Reward: <b>${data.rewardAmount} $CROWD</b></div>`;
-          btn.disabled = false;
-          return;
-        }
-
-        el.innerHTML = `<div class="elig-info">◎ You have an active claim. Resuming...</div>`;
-        btn.disabled = true;
-        await resumeClaim(activeClaim);
+        // Ada claim aktif — resume
+        state.claimId = data.activeClaim.claim_id;
+        el.innerHTML  = `<div class="elig-info">◎ You have an active claim. Resuming...</div>`;
+        btn.disabled  = true;
+        await resumeClaim(data.activeClaim);
         return;
       }
 
@@ -294,7 +287,7 @@
     btn.textContent = '⟳ GENERATING...';
 
     try {
-      // Take existed agentName from CROWD state in page
+      // Ambil agentName dari CROWD state yang sudah ada di page
       state.agentName = window.crowdState?.myAgent?.name ||
                         window.agentName ||
                         'AGENT-' + state.wallet.slice(2, 8).toUpperCase();
@@ -309,9 +302,8 @@
       });
 
       state.claimId = data.claimId;
-      document.getElementById('input-tweet-url').dataset.claimId = data.claimId;
 
-      // Show tweet preview and intent button
+      // Tampilkan tweet preview dan Web Intent button
       document.getElementById('tweet-preview-text').textContent = data.tweetText;
       document.getElementById('btn-open-twitter').href = data.webIntentUrl;
 
@@ -325,10 +317,6 @@
 
   async function submitTweetUrl() {
     const url    = document.getElementById('input-tweet-url').value.trim();
-    // Ambil dari state, fallback ke data attribute di DOM
-    if (!state.claimId) {
-      state.claimId = document.getElementById('input-tweet-url').dataset.claimId;
-    }
     const btn    = document.getElementById('btn-submit-url');
     const errEl  = document.getElementById('url-error');
 
@@ -378,7 +366,7 @@
         clearInterval(state.pollTimer);
         showError('CLAIM_EXPIRED', 'Claim expired. The tweet may have been deleted or took too long to verify.');
       } else if (data.status === 'POSTED') {
-        // Still process in oracle — update step indicator
+        // Masih diproses oracle — update step indicator
         document.getElementById('ps-2').textContent = '◎ Oracle verifying tweet...';
         document.getElementById('ps-3').className = 'progress-step active';
         document.getElementById('ps-3').textContent = '◎ Confirming on Cronos...';
@@ -389,35 +377,18 @@
   }
 
   async function resumeClaim(activeClaim) {
-  state.claimId = activeClaim.claim_id || activeClaim.claimId;
-
-  if (activeClaim.status === 'POSTED') {
-    // Sudah submit URL, tinggal tunggu oracle
-    showStep('step-verifying');
-    startPolling();
-
-  } else if (activeClaim.status === 'PENDING') {
-    // Belum submit URL — ambil detail termasuk tweet_text
-    try {
+    state.claimId = activeClaim.claim_id;
+    if (activeClaim.status === 'POSTED') {
+      showStep('step-verifying');
+      startPolling();
+    } else if (activeClaim.status === 'PENDING') {
+      // Punya claim pending tapi belum submit URL — ambil detail
       const detail = await apiFetch(`/api/claim/${state.claimId}`);
-      state.claimId = detail.claimId;
-
-      if (detail.tweetText) {
-        // Tampilkan tweet preview dan Web Intent button
-        document.getElementById('tweet-preview-text').textContent = detail.tweetText;
-        document.getElementById('btn-open-twitter').href = buildWebIntentUrl(detail.tweetText);
-        document.getElementById('input-tweet-url').dataset.claimId = state.claimId;
-        showStep('step-tweet');
-      } else {
-        // tweet_text tidak ada — suruh mulai ulang
-        await apiFetch(`/api/claim/eligibility?wallet=${state.wallet}`);
-        showStep('step-eligible');
-      }
-    } catch (err) {
-      showStep('step-eligible');
+      // Re-fetch tweet text dan tampilkan lagi
+      document.getElementById('tweet-preview-text').textContent = detail.tweetText || '(tweet text not available — please initiate a new claim)';
+      showStep('step-tweet');
     }
   }
-}
 
   // ── UI HELPERS ────────────────────────────────────────────
   function showStep(stepId) {
@@ -427,12 +398,6 @@
   }
 
   function showError(code, message) {
-    // Kalau error dari wallet connection, reset state wallet
-    if (code === 'WALLET_ERROR' || code === 'NO_WALLET') {
-      state.wallet    = null;
-      state.agentName = null;
-      state.claimId   = null;
-    }
     document.getElementById('error-title').textContent   = code || 'ERROR';
     document.getElementById('error-message').textContent = message || 'Unknown error';
     showStep('step-error');
@@ -473,13 +438,8 @@
     document.getElementById('btn-retry')
       ?.addEventListener('click', () => {
         state.claimId = null;
-        // Kalau wallet belum connect, kembali ke step connect
-        if (!state.wallet) {
-          showStep('step-connect');
-        } else {
-          showStep('step-eligible');
-          checkEligibility();
-        }
+        showStep('step-eligible');
+        checkEligibility();
       });
 
     document.getElementById('btn-reset')
@@ -662,14 +622,17 @@
     document.head.appendChild(style);
   }
 
-  // ── INIT — MutationObserver for SPA ───────────────────────
+  // ── INIT — MutationObserver untuk SPA ───────────────────────
+  // Website CROWD adalah SPA — leaderboard di-render dinamis.
+  // MutationObserver watch DOM sampai .leaderboard-section muncul,
+  // lalu inject section EARN $CROWD tepat setelahnya.
 
   function tryInject() {
-    // Prevent double inject
+    // Cegah double inject
     if (document.getElementById('xclaim-section')) return;
 
     const leaderboard = document.querySelector('.leaderboard-section');
-    if (!leaderboard) return; // not yet render, wait
+    if (!leaderboard) return; // belum render, tunggu
 
     leaderboard.insertAdjacentHTML('afterend', getHtml());
     injectStyles();
@@ -677,13 +640,14 @@
     fetchEligibilityPublic();
   }
 
-  // Split HTML with function so user can call from tryInject
+  // Pisahkan HTML ke fungsi agar bisa dipanggil dari tryInject
   function getHtml() {
-    // — Taking from DOM String above
+    // HTML sama persis dengan yang ada di injectSection() lama
+    // — diambil dari DOM string yang sudah didefinisikan di atas
     return _xclaimHtml;
   }
 
-  // Observer: react everytime DOM change (router render new page)
+  // Observer: react setiap kali DOM berubah (router render page baru)
   const _observer = new MutationObserver(function() {
     tryInject();
   });
@@ -692,6 +656,7 @@
     subtree: true,
   });
 
+  // Coba juga langsung — kalau sudah ada saat script load
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', tryInject);
   } else {
