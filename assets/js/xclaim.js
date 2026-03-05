@@ -410,7 +410,7 @@
 
     if (data.txHashes?.confirm) {
       document.getElementById('btn-view-tx').href =
-        `https://explorer.cronos.org/tx/${data.txHashes.confirm}`;
+        `https://explorer.cronos.org/testnet/tx/${data.txHashes.confirm}`;
     }
 
     document.getElementById('cooldown-notice').textContent =
