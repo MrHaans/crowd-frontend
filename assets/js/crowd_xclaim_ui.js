@@ -177,50 +177,85 @@
     } catch {}
   }
 
-  async function connectWallet() {
-    const provider = window.ethereum || window.okxwallet || window.coinbaseWalletExtension;
+      async function connectWallet() {
+      // Tunggu wallet extension inject ke window (max 3 detik)
+      const provider = await detectProvider();
 
-    if (!provider) {
-      showError('NO_WALLET', 'No wallet detected. Please install MetaMask, OKX Wallet, or Crypto.com DeFi Wallet.');
-      return;
-    }
-
-    try {
-      const accounts = await provider.request({ method: 'eth_requestAccounts' });
-      state.wallet = accounts[0];
-
-      // Switch to Cronos if needed
-      try {
-        await provider.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x152' }],
-        });
-      } catch (switchErr) {
-        if (switchErr.code === 4902) {
-          // Chain not in wallet - add automatically
-          await provider.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId:         '0x152',
-              chainName:       'Cronos Testnet',
-              nativeCurrency:  { name: 'CRO', symbol: 'CRO', decimals: 18 },
-              rpcUrls:         ['https://evm-t3.cronos.org'],
-              blockExplorerUrls: ['https://explorer.cronos.org/testnet'],
-            }],
-          });
-        }
+      if (!provider) {
+        showError('NO_WALLET', 'No wallet detected. Please install MetaMask or OKX Wallet, then refresh the page.');
+        return;
       }
 
-      // Show eligibility
-      document.getElementById('display-wallet').textContent =
-        state.wallet.slice(0, 6) + '...' + state.wallet.slice(-4);
+      try {
+        const accounts = await provider.request({ method: 'eth_requestAccounts' });
+        state.wallet = accounts[0];
 
-      showStep('step-eligible');
-      await checkEligibility();
-    } catch (err) {
-      showError('WALLET_ERROR', err.message);
+        try {
+          await provider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x152' }],
+          });
+        } catch (switchErr) {
+          if (switchErr.code === 4902) {
+            await provider.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId:           '0x152',
+                chainName:         'Cronos Testnet',
+                nativeCurrency:    { name: 'CRO', symbol: 'CRO', decimals: 18 },
+                rpcUrls:           ['https://evm-t3.cronos.org'],
+                blockExplorerUrls: ['https://explorer.cronos.org/testnet'],
+              }],
+            });
+          }
+        }
+
+        document.getElementById('display-wallet').textContent =
+          state.wallet.slice(0, 6) + '...' + state.wallet.slice(-4);
+
+        showStep('step-eligible');
+        await checkEligibility();
+      } catch (err) {
+        showError('WALLET_ERROR', err.message);
+      }
     }
-  }
+
+    // Helper: detect provider dengan retry
+    function detectProvider(maxWait = 3000) {
+      return new Promise((resolve) => {
+        // Cek semua kemungkinan provider
+        const getProvider = () =>
+          window.ethereum ||
+          window.okxwallet?.ethereum ||
+          window.okxwallet ||
+          window.coinbaseWalletExtension ||
+          window.trustwallet;
+
+        // Kalau sudah ada langsung return
+        const immediate = getProvider();
+        if (immediate) return resolve(immediate);
+
+        // Kalau belum, tunggu event 'ethereum#initialized' atau polling
+        let elapsed = 0;
+        const interval = setInterval(() => {
+          elapsed += 100;
+          const p = getProvider();
+          if (p) {
+            clearInterval(interval);
+            resolve(p);
+          } else if (elapsed >= maxWait) {
+            clearInterval(interval);
+            resolve(null);
+          }
+        }, 100);
+
+        // OKX Wallet dispatch event ini saat siap
+        window.addEventListener('ethereum#initialized', () => {
+          clearInterval(interval);
+          resolve(getProvider());
+        }, { once: true });
+      });
+    }
 
   async function checkEligibility() {
     try {
