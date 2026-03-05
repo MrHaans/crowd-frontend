@@ -178,25 +178,27 @@
   }
 
   async function connectWallet() {
-    if (!window.ethereum) {
-      showError('NO_WALLET', 'MetaMask or Crypto.com DeFi Wallet not detected. Please install one.');
+    const provider = window.ethereum || window.okxwallet || window.coinbaseWalletExtension;
+
+    if (!provider) {
+      showError('NO_WALLET', 'No wallet detected. Please install MetaMask, OKX Wallet, or Crypto.com DeFi Wallet.');
       return;
     }
 
     try {
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
       state.wallet = accounts[0];
 
       // Switch to Cronos if needed
       try {
-        await window.ethereum.request({
+        await provider.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x152' }], // 25 in hex = Cronos Mainnet
+          params: [{ chainId: '0x152' }],
         });
       } catch (switchErr) {
         if (switchErr.code === 4902) {
           // Chain not in wallet - add automatically
-          await window.ethereum.request({
+          await provider.request({
             method: 'wallet_addEthereumChain',
             params: [{
               chainId:         '0x152',
