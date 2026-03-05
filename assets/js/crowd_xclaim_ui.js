@@ -221,21 +221,24 @@
     }
 
     // Helper: detect provider dengan retry
-    function detectProvider(maxWait = 3000) {
+      function detectProvider(maxWait = 3000) {
       return new Promise((resolve) => {
-        // Cek semua kemungkinan provider
-        const getProvider = () =>
-          window.ethereum ||
-          window.okxwallet?.ethereum ||
-          window.okxwallet ||
-          window.coinbaseWalletExtension ||
-          window.trustwallet;
+        const getProvider = () => {
+          // OKX Wallet inject sebagai window.okxwallet langsung
+          if (window.okxwallet && typeof window.okxwallet.request === 'function') {
+            return window.okxwallet;
+          }
+          // MetaMask / wallet lain via window.ethereum
+          if (window.ethereum && typeof window.ethereum.request === 'function') {
+            return window.ethereum;
+          }
+          return null;
+        };
 
-        // Kalau sudah ada langsung return
         const immediate = getProvider();
         if (immediate) return resolve(immediate);
 
-        // Kalau belum, tunggu event 'ethereum#initialized' atau polling
+        // Polling fallback
         let elapsed = 0;
         const interval = setInterval(() => {
           elapsed += 100;
@@ -248,12 +251,6 @@
             resolve(null);
           }
         }, 100);
-
-        // OKX Wallet dispatch event ini saat siap
-        window.addEventListener('ethereum#initialized', () => {
-          clearInterval(interval);
-          resolve(getProvider());
-        }, { once: true });
       });
     }
 
