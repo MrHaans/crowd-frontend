@@ -23,13 +23,26 @@
       <span class="nav-link"        data-page="status">STATUS</span>
     </div>
     <div class="nav-right">
-      <span class="nav-version">v1.0.0</span>
+      <span class="nav-version hide-mobile">v1.0.0</span>
       <button class="theme-toggle" id="theme-btn" title="Toggle dark / light mode">
         <div class="toggle-track"><div class="toggle-thumb"></div></div>
         <span class="toggle-label" id="toggle-label">DARK</span>
       </button>
+      <button class="hamburger" id="hamburger-btn" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
     </div>
   </nav>
+
+  <!-- MOBILE NAV OVERLAY -->
+  <div class="mobile-menu" id="mobile-menu">
+    <div class="mobile-menu-inner">
+      <span class="mobile-nav-link" data-page="home">HOME</span>
+      <span class="mobile-nav-link" data-page="docs">DOCS</span>
+      <span class="mobile-nav-link" data-page="story">STORY</span>
+      <span class="mobile-nav-link" data-page="status">STATUS</span>
+    </div>
+  </div>
 
   <!-- TICKER -->
   <div class="ticker">

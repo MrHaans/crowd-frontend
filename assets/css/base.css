@@ -161,3 +161,17 @@ body::after {
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
 }
+
+/* Touch-friendly tap targets */
+@media (hover: none) and (pointer: coarse) {
+  .nav-link, .sidebar-link, .footer-links a,
+  .mobile-nav-link, .btn-primary, .btn-secondary,
+  .copy-btn, .theme-toggle {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+  .btn-primary, .btn-secondary {
+    justify-content: center;
+  }
+}
