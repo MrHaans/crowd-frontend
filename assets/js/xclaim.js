@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const API_BASE = 'http://localhost:3001';
+  const API_BASE = 'https://crowd-backend-production.up.railway.app';
   const POLL_INTERVAL_MS = 5000;
 
   // ── STATE ─────────────────────────────────────────────────
