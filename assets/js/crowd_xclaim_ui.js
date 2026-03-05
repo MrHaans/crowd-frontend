@@ -182,7 +182,7 @@
       const provider = await detectProvider();
 
       if (!provider) {
-        showError('NO_WALLET', 'No wallet detected. Please install MetaMask or OKX Wallet, then refresh the page.');
+        showError('NO_WALLET', 'OKX Wallet detected but not ready. Try to refresh page.');
         return;
       }
 
@@ -222,37 +222,21 @@
 
     // Helper: detect provider dengan retry
       function detectProvider(maxWait = 3000) {
-      return new Promise((resolve) => {
-        const getProvider = () => {
-          // OKX Wallet inject sebagai window.okxwallet langsung
-          if (window.okxwallet && typeof window.okxwallet.request === 'function') {
-            return window.okxwallet;
-          }
-          // MetaMask / wallet lain via window.ethereum
-          if (window.ethereum && typeof window.ethereum.request === 'function') {
-            return window.ethereum;
-          }
-          return null;
-        };
+        return new Promise((resolve) => {
+          // Cek langsung tanpa delay
+          if (window.okxwallet?.request) return resolve(window.okxwallet);
+          if (window.ethereum?.request)  return resolve(window.ethereum);
 
-        const immediate = getProvider();
-        if (immediate) return resolve(immediate);
-
-        // Polling fallback
-        let elapsed = 0;
-        const interval = setInterval(() => {
-          elapsed += 100;
-          const p = getProvider();
-          if (p) {
-            clearInterval(interval);
-            resolve(p);
-          } else if (elapsed >= maxWait) {
-            clearInterval(interval);
-            resolve(null);
-          }
-        }, 100);
-      });
-    }
+          // OKX kadang butuh waktu inject — polling 100ms
+          let elapsed = 0;
+          const timer = setInterval(() => {
+            elapsed += 100;
+            if (window.okxwallet?.request) { clearInterval(timer); return resolve(window.okxwallet); }
+            if (window.ethereum?.request)  { clearInterval(timer); return resolve(window.ethereum); }
+            if (elapsed >= maxWait)        { clearInterval(timer); return resolve(null); }
+          }, 100);
+        });
+      }
 
   async function checkEligibility() {
     try {
